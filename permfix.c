@@ -1,13 +1,21 @@
 #include <windows.h>
 #include <aclapi.h>
 #include <sddl.h>
-#include <shlwapi.h>
 
 PSID g_PSID = NULL;
 PSID g_UsersSID = NULL;
 
 #define LOG_BUFFER_SIZE 1024
 #define UTF8_BUFFER_SIZE ((LOG_BUFFER_SIZE * 4) + 1)
+
+wchar_t *xstrchrW(const wchar_t *s, int c)
+{
+
+	for(; *s != '\0' && *s != c; s++)
+		;
+
+	return *s == c ? (wchar_t *)s : NULL;
+}
 
 static HANDLE GetStdOutHandle(void)
 {
@@ -25,10 +33,10 @@ static void LogW(LPCWSTR format, ...)
 	char utf8[UTF8_BUFFER_SIZE];
 	va_list args;
 	va_start(args, format);
-	
+
 	int len = wvsprintfW(buffer, format, args);
 	va_end(args);
-	
+
 	if(len > 0)
 	{
 		int utf8Len = WideCharToMultiByte(CP_UTF8, 0, buffer, len, utf8, sizeof(utf8), NULL, NULL);
@@ -50,7 +58,7 @@ static PSID GetSID(LPCWSTR accountName)
 	HANDLE heap = GetProcessHeap();
 
 	LookupAccountNameW(NULL, accountName, NULL, &sidSize, domainName, &domainSize, &sidType);
-	if(sidSize == 0) 
+	if(sidSize == 0)
 	{
 		LogW(L"Failed to get SID size\r\n");
 		return NULL;
@@ -167,8 +175,7 @@ void FixPermissionsRecursively(LPCWSTR path)
 
 int mainCRTStartup(void)
 {
-	LPWSTR *argv;
-	int argc;
+	LPWSTR p, args;
 	LPWSTR directory = NULL;
 	HANDLE hToken;
 	struct
@@ -187,14 +194,14 @@ int mainCRTStartup(void)
 	{
 		L"SeTakeOwnershipPrivilege",
 		L"SeSecurityPrivilege",
-		L"SeBackupPrivilege", 
+		L"SeBackupPrivilege",
 		L"SeRestorePrivilege",
 		L"SeChangeNotifyPrivilege"
 	};
 
 	DWORD privilegeCount = sizeof(privileges) / sizeof(privileges[0]);
 	tkp.PrivilegeCount = privilegeCount;
-	
+
 	for(DWORD i = 0; i < privilegeCount; i++)
 	{
 		if(!LookupPrivilegeValueW(NULL, privileges[i], &tkp.Privileges[i].Luid))
@@ -221,16 +228,19 @@ int mainCRTStartup(void)
 		ExitProcess(1);
 	}
 
-	argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	if(argc < 2)
+	args = GetCommandLineW();
+
+	p = xstrchrW(args, ' ');
+
+	if(!p)
 	{
-		LogW(L"Usage: <program> <directory>\r\n");
+		LogW(L"Usage: %ls <directory>\r\n", args);
 		CloseHandle(hToken);
 		ExitProcess(1);
 	}
 
-	directory = argv[1];
-	
+	directory = p + 1;
+
 	// Convert relative path to absolute path
 	WCHAR fullPath[MAX_PATH];
 	if(GetFullPathNameW(directory, MAX_PATH, fullPath, NULL) == 0)
