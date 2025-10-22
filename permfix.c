@@ -2,6 +2,12 @@
 #include <aclapi.h>
 #include <sddl.h>
 
+#ifdef _MSC_VER
+#pragma comment(linker, "/ENTRY:mainCRTStartup")
+#pragma comment(linker, "/NODEFAULTLIB")
+#pragma comment(linker, "/subsystem:console")
+#endif
+
 PSID g_PSID = NULL;
 PSID g_UsersSID = NULL;
 
